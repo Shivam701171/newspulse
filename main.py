@@ -132,6 +132,9 @@ def send_push(device_id: str, topic_name: str, count: int):
         subs = db2.query(PushSubscription).filter(PushSubscription.device_id == device_id).all()
         for sub in subs:
             try:
+                from py_vapid import Vapid
+                vapid = Vapid()
+                vapid.from_string(VAPID_PRIVATE)
                 webpush(
                     subscription_info={
                         "endpoint": sub.endpoint,
@@ -141,7 +144,7 @@ def send_push(device_id: str, topic_name: str, count: int):
                         "title": f"NewsPulse · {topic_name}",
                         "body":  f"{count} new update{'s' if count > 1 else ''}"
                     }),
-                    vapid_private_key=VAPID_PRIVATE,
+                    vapid_private_key=vapid,
                     vapid_claims={"sub": VAPID_EMAIL}
                 )
             except Exception as e:
