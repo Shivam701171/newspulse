@@ -1,0 +1,11 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+pydantic==2.10.3
+python-dotenv==1.0.1
+groq==0.13.0
+python-multipart==0.0.17
+httpx==0.27.2
+apscheduler==3.10.4
+PyJWT==2.9.0
+bcrypt==4.2.1
