@@ -59,6 +59,15 @@ Base.metadata.create_all(bind=engine)
 # Ensure new tables are created if they don't exist
 from sqlalchemy import inspect
 inspector = inspect(engine)
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+    id         = Column(Integer, primary_key=True)
+    device_id  = Column(String, index=True)
+    endpoint   = Column(String, unique=True)
+    p256dh     = Column(String)
+    auth       = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 if 'push_subscriptions' not in inspector.get_table_names():
     PushSubscription.__table__.create(bind=engine)
 
@@ -92,6 +101,12 @@ class UpdateOut(BaseModel):
     is_read:      bool
     sentiment:    str
     class Config: from_attributes = True
+
+class SubRequest(BaseModel):
+    device_id: str
+    endpoint:  str
+    p256dh:    str
+    auth:      str
 
 class MarkReadRequest(BaseModel):
     device_id: str
