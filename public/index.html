@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "ed1c1615-7622-4c63-9058-77f437695537",
+      notifyButton: { enable: false },
+      allowLocalhostAsSecureOrigin: true,
+    });
+  });
+</script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -993,30 +1004,9 @@ setInterval(()=>{if(currentId)loadFeed();checkUnread()},120000);
 loadTopics();
 // ─── Push Notifications ───────────────────────────────────
 async function enableNotifications(){
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)){
-    toast('Push not supported in this browser');return;
-  }
-  const perm = await Notification.requestPermission();
-  if(perm !== 'granted'){toast('Notifications blocked');return}
   try{
-    const reg = await navigator.serviceWorker.register('./sw.js');
-    const keyResp = await api('/api/push/vapid-public-key');
-    const appKey = urlBase64ToUint8Array(keyResp.key);
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: appKey
-    });
-    const j = sub.toJSON();
-    await api('/api/push/subscribe', {
-      method: 'POST',
-      body: JSON.stringify({
-        device_id: DID,
-        endpoint:  j.endpoint,
-        p256dh:    j.keys.p256dh,
-        auth:      j.keys.auth
-      })
-    });
-    localStorage.setItem('np_notif', 'enabled');
+    await OneSignal.Notifications.requestPermission();
+    localStorage.setItem('np_notif','enabled');
     updateNotifBtn(true);
     toast('✓ Notifications enabled!');
   }catch(e){

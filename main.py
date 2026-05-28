@@ -127,31 +127,27 @@ def get_db():
     finally: db.close()
 
 def send_push(device_id: str, topic_name: str, count: int):
-    db2 = SessionLocal()
+    onesignal_key = os.getenv("ONESIGNAL_API_KEY", "")
+    onesignal_app = os.getenv("ONESIGNAL_APP_ID", "")
+    if not onesignal_key or not onesignal_app:
+        return
     try:
-        subs = db2.query(PushSubscription).filter(PushSubscription.device_id == device_id).all()
-        for sub in subs:
-            try:
-                from py_vapid import Vapid
-                vapid = Vapid()
-                vapid.from_string(VAPID_PRIVATE)
-                webpush(
-                    subscription_info={
-                        "endpoint": sub.endpoint,
-                        "keys": {"p256dh": sub.p256dh, "auth": sub.auth}
-                    },
-                    data=json.dumps({
-                        "title": f"NewsPulse · {topic_name}",
-                        "body":  f"{count} new update{'s' if count > 1 else ''}"
-                    }),
-                    vapid_private_key=vapid,
-                    vapid_claims={"sub": VAPID_EMAIL}
-                )
-            except Exception as e:
-                print(f"Push error: {e}")
-    finally:
-        db2.close()
-
+        httpx.post(
+            "https://onesignal.com/api/v1/notifications",
+            headers={
+                "Authorization": f"Basic {onesignal_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "app_id": onesignal_app,
+                "included_segments": ["All"],
+                "headings": {"en": f"NewsPulse · {topic_name}"},
+                "contents": {"en": f"{count} new update{'s' if count > 1 else ''}"},
+            },
+            timeout=10
+        )
+    except Exception as e:
+        print(f"Push error: {e}")
 # ─── News Fetching ────────────────────────────────────────────────────────────
 def fetch_news_for_topic(topic_id: int):
     db = SessionLocal()
