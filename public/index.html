@@ -431,7 +431,13 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--san
 }
 @keyframes spinr{to{transform:rotate(360deg)}}
 
-@media(max-width:900px){.ask-pane{display:none}}
+@media(max-width:900px){.ask-pane{display:none !important}}
+
+@media(max-width:768px){
+  .ask-pane{display:none !important}
+  .content-area{display:block;flex:1;overflow:hidden}
+  .feed-wrap{width:100% !important;flex:1}
+}
 
 @media(max-width:768px){
   .sidebar{display:none}
@@ -537,10 +543,19 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--san
     transition:transform .35s cubic-bezier(.16,1,.3,1);
   }
 
-  /* Ask AI modal smooth slide up */
+  /* Ask AI modal - proper iOS bottom sheet */
+  #mob-ask-overlay{
+    align-items:flex-end !important;
+  }
   #mob-ask-overlay .modal{
-    max-height:85dvh;
+    max-height:88dvh;
     overflow-y:auto;
+    border-radius:22px 22px 0 0;
+    transform:translateY(100%);
+    transition:transform .32s cubic-bezier(.32,0,.67,0);
+  }
+  #mob-ask-overlay.show .modal{
+    transform:translateY(0);
   }
 
   .toast{bottom:calc(76px + var(--sbot))}
@@ -673,9 +688,12 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--san
 
 <!-- MOBILE ASK AI MODAL -->
 <div class="overlay" id="mob-ask-overlay" onclick="if(event.target===this)closeMobAsk()" style="z-index:850;display:none">
-  <div class="modal">
-    <div class="modal-bar"></div>
-    <div class="modal-heading">Ask AI</div>
+  <div class="modal" id="mob-ask-modal">
+    <div class="modal-bar" style="cursor:pointer" onclick="closeMobAsk()"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div class="modal-heading" style="margin-bottom:0">Ask AI</div>
+      <div onclick="closeMobAsk()" style="width:30px;height:30px;border-radius:8px;background:var(--s3);display:grid;place-items:center;cursor:pointer;color:var(--t3);font-size:13px">✕</div>
+    </div>
     <div class="modal-hint" id="mob-ask-hint">Ask anything about your tracked topic</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
       <button class="ask-chip" onclick="mobFireQ(this)" style="border-radius:10px;padding:10px 14px;font-size:13px;text-align:left">What's the very latest?</button>
@@ -915,6 +933,8 @@ async function doAsk(){
 
 // Mobile Ask
 function openMobAsk(){
+  // Always use modal on mobile, never show side panel
+  document.getElementById('ask-pane').style.display='none';
   if(!currentId){toast('Select a topic first');return}
   const t=topics.find(x=>x.id===currentId);
   if(t)document.getElementById('mob-ask-hint').textContent='Asking about: '+t.name;
