@@ -999,7 +999,7 @@ async function enableNotifications(){
   const perm = await Notification.requestPermission();
   if(perm !== 'granted'){toast('Notifications blocked');return}
   try{
-    const reg = await navigator.serviceWorker.register('/sw.js');
+    const reg = await navigator.serviceWorker.register('./sw.js');
     const keyResp = await api('/api/push/vapid-public-key');
     const appKey = urlBase64ToUint8Array(keyResp.key);
     const sub = await reg.pushManager.subscribe({
