@@ -56,6 +56,12 @@ class UpdateDB(Base):
 
 Base.metadata.create_all(bind=engine)
 
+# Ensure new tables are created if they don't exist
+from sqlalchemy import inspect
+inspector = inspect(engine)
+if 'push_subscriptions' not in inspector.get_table_names():
+    PushSubscription.__table__.create(bind=engine)
+
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 class TopicCreate(BaseModel):
     device_id: str
