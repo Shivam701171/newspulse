@@ -1024,6 +1024,12 @@ async function enableNotifications(){
   }
 }
 
+function urlBase64ToUint8Array(b){
+  const pad='='.repeat((4-b.length%4)%4);
+  const base64=(b+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=window.atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
 function updateNotifBtn(enabled){
   const btn = document.getElementById('notif-btn');
   if(!btn) return;
