@@ -10,7 +10,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 import os, json, httpx, hashlib
 from groq import Groq
 from dotenv import load_dotenv
-
+from pywebpush import webpush, WebPushException
 load_dotenv()
 
 # ─── Config ──────────────────────────────────────────────────────────────────
@@ -18,6 +18,9 @@ NEWS_API_KEY  = os.getenv("NEWS_API_KEY", "")
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
 DATABASE_URL  = os.getenv("DATABASE_URL", "sqlite:///./newspulse.db")
 FETCH_INTERVAL_MINUTES = int(os.getenv("FETCH_INTERVAL", "30"))
+VAPID_PUBLIC  = os.getenv("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE = os.getenv("VAPID_PRIVATE_KEY", "")
+VAPID_EMAIL   = os.getenv("VAPID_EMAIL", "mailto:test@test.com")
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 engine       = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
@@ -101,6 +104,29 @@ def get_db():
     db = SessionLocal()
     try:   yield db
     finally: db.close()
+
+def send_push(device_id: str, topic_name: str, count: int):
+    db2 = SessionLocal()
+    try:
+        subs = db2.query(PushSubscription).filter(PushSubscription.device_id == device_id).all()
+        for sub in subs:
+            try:
+                webpush(
+                    subscription_info={
+                        "endpoint": sub.endpoint,
+                        "keys": {"p256dh": sub.p256dh, "auth": sub.auth}
+                    },
+                    data=json.dumps({
+                        "title": f"NewsPulse · {topic_name}",
+                        "body":  f"{count} new update{'s' if count > 1 else ''}"
+                    }),
+                    vapid_private_key=VAPID_PRIVATE,
+                    vapid_claims={"sub": VAPID_EMAIL}
+                )
+            except Exception as e:
+                print(f"Push error: {e}")
+    finally:
+        db2.close()
 
 # ─── News Fetching ────────────────────────────────────────────────────────────
 def fetch_news_for_topic(topic_id: int):
@@ -247,7 +273,10 @@ SENTIMENT: <POSITIVE/NEGATIVE/NEUTRAL>"""
         topic.last_fetched = datetime.utcnow()
         db.commit()
         print(f"✓ Fetched news for topic: {topic.name}")
+        if new_articles:
+            send_push(topic.device_id, topic.name, len(new_articles))
 
+        print(f"✓ Fetched news for topic: {topic.name}")
     except Exception as e:
         print(f"Fetch error for topic {topic_id}: {e}")
     finally:
@@ -274,6 +303,36 @@ scheduler.add_job(
 )
 scheduler.start()
 
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+    id         = Column(Integer, primary_key=True)
+    device_id  = Column(String, index=True)
+    endpoint   = Column(String, unique=True)
+    p256dh     = Column(String)
+    auth       = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class SubRequest(BaseModel):
+    device_id: str
+    endpoint:  str
+    p256dh:    str
+    auth:      str
+
+@app.post("/api/push/subscribe")
+def subscribe(req: SubRequest):
+    db = SessionLocal()
+    try:
+        existing = db.query(PushSubscription).filter(PushSubscription.endpoint == req.endpoint).first()
+        if not existing:
+            db.add(PushSubscription(**req.dict()))
+            db.commit()
+        return {"message": "Subscribed"}
+    finally:
+        db.close()
+
+@app.get("/api/push/vapid-public-key")
+def get_vapid_key():
+    return {"key": VAPID_PUBLIC}
 # ─── Topic Routes ─────────────────────────────────────────────────────────────
 @app.get("/api/topics/{device_id}", response_model=List[TopicOut])
 def get_topics(device_id: str):
@@ -432,7 +491,7 @@ Latest news updates:
         db.close()
 
 # ─── Health ───────────────────────────────────────────────────────────────────
-@app.get("/")
-@app.get("/health")
+@app.api_route("/", methods=["GET", "HEAD"])
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok", "service": "NewsPulse"}
