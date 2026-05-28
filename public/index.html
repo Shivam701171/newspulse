@@ -600,6 +600,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--san
         <div class="tb-icon" onclick="openDrawer()" id="mob-menu-btn" title="Topics">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </div>
+        <div class="tb-btn" onclick="enableNotifications()" id="notif-btn">🔔 Notify me</div>
         <div class="tb-btn" onclick="doRefresh()" id="ref-btn">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Refresh
@@ -990,6 +991,41 @@ function fetched(dt){return dt?'Fetched '+timeAgo(new Date(dt)):''}
 setInterval(()=>{if(currentId)loadFeed();checkUnread()},120000);
 
 loadTopics();
+// ─── Push Notifications ───────────────────────────────────
+async function enableNotifications(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)){
+    toast('Push not supported in this browser');return;
+  }
+  const perm = await Notification.requestPermission();
+  if(perm !== 'granted'){toast('Notifications blocked');return}
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  const keyResp = await api('/api/push/vapid-public-key');
+  const appKey = urlBase64ToUint8Array(keyResp.key);
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: appKey
+  });
+  const j = sub.toJSON();
+  await api('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({
+      device_id: DID,
+      endpoint:  j.endpoint,
+      p256dh:    j.keys.p256dh,
+      auth:      j.keys.auth
+    })
+  });
+  const btn = document.getElementById('notif-btn');
+  if(btn){btn.textContent='🔔 On';btn.style.color='var(--green)'}
+  toast('✓ Notifications enabled!');
+}
+
+function urlBase64ToUint8Array(b){
+  const pad='='.repeat((4-b.length%4)%4);
+  const base64=(b+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=window.atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
 </script>
 </body>
 </html>
