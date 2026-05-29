@@ -65,6 +65,23 @@ class PushSubscription(Base):
 
 Base.metadata.create_all(bind=engine)
 
+
+Base.metadata.create_all(bind=engine)
+
+# Force create push_subscriptions if missing
+from sqlalchemy import text
+with engine.connect() as conn:
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id VARCHAR,
+            endpoint VARCHAR UNIQUE,
+            p256dh VARCHAR,
+            auth VARCHAR,
+            created_at DATETIME
+        )
+    """))
+    conn.commit()
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 class TopicCreate(BaseModel):
     device_id: str
