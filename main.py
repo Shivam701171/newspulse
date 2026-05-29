@@ -138,27 +138,32 @@ def get_db():
     finally: db.close()
 
 def send_push(device_id: str, topic_name: str, count: int):
-    onesignal_key = os.getenv("ONESIGNAL_API_KEY", "")
-    onesignal_app = os.getenv("ONESIGNAL_APP_ID", "")
-    if not onesignal_key or not onesignal_app:
+    onesignal_app_id = os.getenv("ONESIGNAL_APP_ID", "")
+    onesignal_api_key = os.getenv("ONESIGNAL_API_KEY", "")
+    if not onesignal_app_id or not onesignal_api_key:
+        print("OneSignal keys not configured")
         return
     try:
-        httpx.post(
+        import httpx
+        response = httpx.post(
             "https://onesignal.com/api/v1/notifications",
             headers={
-                "Authorization": f"Basic {onesignal_key}",
+                "Authorization": f"Basic {onesignal_api_key}",
                 "Content-Type": "application/json"
             },
             json={
-                "app_id": onesignal_app,
+                "app_id": onesignal_app_id,
                 "included_segments": ["All"],
                 "headings": {"en": f"NewsPulse · {topic_name}"},
-                "contents": {"en": f"{count} new update{'s' if count > 1 else ''}"},
+                "contents": {"en": f"{count} new update{'s' if count > 1 else ''} available"},
+                "url": "https://newspulse-frontend-henna.vercel.app"
             },
             timeout=10
         )
+        print(f"Push sent: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Push error: {e}")
+
 # ─── News Fetching ────────────────────────────────────────────────────────────
 def fetch_news_for_topic(topic_id: int):
     db = SessionLocal()
