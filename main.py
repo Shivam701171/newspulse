@@ -152,7 +152,9 @@ def send_push(device_id: str, topic_name: str, count: int):
             },
             json={
                 "app_id": onesignal_app_id,
-                "included_segments": ["All"],
+                "filters": [
+                    {"field": "tag", "key": "device_id", "relation": "=", "value": device_id}
+                ],
                 "headings": {"en": f"NewsPulse · {topic_name}"},
                 "contents": {"en": f"{count} new update{'s' if count > 1 else ''} available"},
                 "url": "https://newspulse-frontend-henna.vercel.app"
@@ -179,7 +181,7 @@ def fetch_news_for_topic(topic_id: int):
                 resp = httpx.post(
                     "https://google.serper.dev/news",
                     headers={"X-API-KEY": os.getenv("SERPER_API_KEY"), "Content-Type": "application/json"},
-                    json={"q": topic.query, "num": 10},
+                    json={"q": topic.query, "num": 10, "tbs": "qdr:d"},  # last 24 hours,
                     timeout=15
                 )
                 if resp.status_code == 200:
@@ -244,7 +246,9 @@ def fetch_news_for_topic(topic_id: int):
             return
 
         # Process and summarize articles
+        from datetime import timedelta
         new_articles = []
+        cutoff = datetime.utcnow() - timedelta(days=7)
         for article in articles:
             title = article.get("title", "")
             if not title or title == "[Removed]":
@@ -255,6 +259,13 @@ def fetch_news_for_topic(topic_id: int):
             existing = db.query(UpdateDB).filter(UpdateDB.article_hash == art_hash).first()
             if existing:
                 continue
+                # Skip articles older than 7 days
+            if pub_date:
+                try:
+                    pub_dt_check = datetime.fromisoformat(pub_date)
+                    if pub_dt_check < cutoff:
+                        continue
+                except: pass
             new_articles.append({
                 "title":        title,
                 "content":      content,
@@ -264,6 +275,7 @@ def fetch_news_for_topic(topic_id: int):
                 "hash":         art_hash,
             })
 
+        new_articles.sort(key=lambda x: x.get("published_at", "") or "", reverse=True)
         if not new_articles or not GROQ_API_KEY:
             topic.last_fetched = datetime.utcnow()
             db.commit()
