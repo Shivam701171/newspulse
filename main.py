@@ -17,7 +17,7 @@ load_dotenv()
 NEWS_API_KEY  = os.getenv("NEWS_API_KEY", "")
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
 DATABASE_URL  = os.getenv("DATABASE_URL", "sqlite:///./newspulse.db")
-FETCH_INTERVAL_MINUTES = int(os.getenv("FETCH_INTERVAL", "30"))
+FETCH_INTERVAL_MINUTES = int(os.getenv("FETCH_INTERVAL", "15"))
 VAPID_PUBLIC  = os.getenv("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE = os.getenv("VAPID_PRIVATE_KEY", "")
 VAPID_EMAIL   = os.getenv("VAPID_EMAIL", "mailto:test@test.com")
@@ -166,6 +166,26 @@ def send_push(device_id: str, topic_name: str, count: int):
 # ─── News Fetching ────────────────────────────────────────────────────────────
 def fetch_news_for_topic(topic_id: int):
     db = SessionLocal()
+    if os.getenv("SERPER_API_KEY"):
+        try:
+            resp = httpx.post(
+                "https://google.serper.dev/news",
+                headers={"X-API-KEY": os.getenv("SERPER_API_KEY"), "Content-Type": "application/json"},
+                json={"q": topic.query, "num": 10},
+                timeout=15
+            )
+            if resp.status_code == 200:
+                raw = resp.json().get("news", [])
+                articles = [{
+                    "title":       a.get("title"),
+                    "description": a.get("snippet"),
+                    "content":     a.get("snippet"),
+                    "url":         a.get("link"),
+                    "publishedAt": a.get("date"),
+                    "source":      {"name": a.get("source")},
+                } for a in raw]
+        except Exception as e:
+            print(f"Serper error: {e}")
     try:
         topic = db.query(TopicDB).filter(TopicDB.id == topic_id).first()
         if not topic or not topic.is_active:
@@ -232,7 +252,8 @@ def fetch_news_for_topic(topic_id: int):
                 continue
 
             content = article.get("content") or article.get("description") or ""
-            art_hash = hashlib.md5((title + content[:100]).encode()).hexdigest()
+            pub_date = article.get("publishedAt", "")[:10]  # just the date
+            art_hash = hashlib.md5((title + pub_date).encode()).hexdigest()
 
             # Skip duplicates
             existing = db.query(UpdateDB).filter(UpdateDB.article_hash == art_hash).first()
