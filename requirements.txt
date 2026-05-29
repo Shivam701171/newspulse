@@ -11,3 +11,4 @@ PyJWT==2.9.0
 bcrypt==4.2.1
 pywebpush==2.0.0
 py_vapid==1.8.2
+python-dateutil==2.9.0

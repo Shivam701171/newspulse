@@ -174,7 +174,7 @@ def fetch_news_for_topic(topic_id: int):
             return
 
         articles = []
-
+        from dateutil import parser as dateparser
         # Try Serper first (live Google results)
         if os.getenv("SERPER_API_KEY"):
             try:
@@ -310,8 +310,16 @@ SENTIMENT: <POSITIVE/NEGATIVE/NEUTRAL>"""
                 pub_dt = None
                 if art["published_at"]:
                     try:
+                        # Try ISO format first
                         pub_dt = datetime.fromisoformat(art["published_at"].replace("Z", "+00:00")).replace(tzinfo=None)
-                    except: pass
+                    except:
+                        try:
+                            # Handle Serper's human readable dates like "Dec 25, 2025"
+                            from dateutil import parser as dateparser
+                            pub_dt = dateparser.parse(art["published_at"])
+                            if pub_dt:
+                                pub_dt = pub_dt.replace(tzinfo=None)
+                        except: pass
 
                 db.add(UpdateDB(
                     topic_id=topic.id, device_id=topic.device_id,
