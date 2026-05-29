@@ -166,26 +166,6 @@ def send_push(device_id: str, topic_name: str, count: int):
 # ─── News Fetching ────────────────────────────────────────────────────────────
 def fetch_news_for_topic(topic_id: int):
     db = SessionLocal()
-    if os.getenv("SERPER_API_KEY"):
-        try:
-            resp = httpx.post(
-                "https://google.serper.dev/news",
-                headers={"X-API-KEY": os.getenv("SERPER_API_KEY"), "Content-Type": "application/json"},
-                json={"q": topic.query, "num": 10},
-                timeout=15
-            )
-            if resp.status_code == 200:
-                raw = resp.json().get("news", [])
-                articles = [{
-                    "title":       a.get("title"),
-                    "description": a.get("snippet"),
-                    "content":     a.get("snippet"),
-                    "url":         a.get("link"),
-                    "publishedAt": a.get("date"),
-                    "source":      {"name": a.get("source")},
-                } for a in raw]
-        except Exception as e:
-            print(f"Serper error: {e}")
     try:
         topic = db.query(TopicDB).filter(TopicDB.id == topic_id).first()
         if not topic or not topic.is_active:
@@ -193,8 +173,31 @@ def fetch_news_for_topic(topic_id: int):
 
         articles = []
 
-        # Try NewsAPI first
-        if NEWS_API_KEY:
+        # Try Serper first (live Google results)
+        if os.getenv("SERPER_API_KEY"):
+            try:
+                resp = httpx.post(
+                    "https://google.serper.dev/news",
+                    headers={"X-API-KEY": os.getenv("SERPER_API_KEY"), "Content-Type": "application/json"},
+                    json={"q": topic.query, "num": 10},
+                    timeout=15
+                )
+                if resp.status_code == 200:
+                    raw = resp.json().get("news", [])
+                    articles = [{
+                        "title":       a.get("title"),
+                        "description": a.get("snippet"),
+                        "content":     a.get("snippet"),
+                        "url":         a.get("link"),
+                        "publishedAt": a.get("date"),
+                        "source":      {"name": a.get("source")},
+                    } for a in raw]
+                    print(f"Serper found {len(articles)} articles")
+            except Exception as e:
+                print(f"Serper error: {e}")
+
+        # Try NewsAPI if Serper found nothing
+        if not articles and NEWS_API_KEY:
             try:
                 url = "https://newsapi.org/v2/everything"
                 params = {
@@ -206,28 +209,24 @@ def fetch_news_for_topic(topic_id: int):
                 }
                 if topic.last_fetched:
                     params["from"] = topic.last_fetched.strftime("%Y-%m-%dT%H:%M:%S")
-
                 resp = httpx.get(url, params=params, timeout=15)
                 if resp.status_code == 200:
-                    data = resp.json()
-                    articles = data.get("articles", [])
+                    articles = resp.json().get("articles", [])
             except Exception as e:
                 print(f"NewsAPI error: {e}")
 
-        # Fallback: GNews (free, no key needed for basic)
+        # Fallback: GNews
         if not articles:
             try:
-                url = f"https://gnews.io/api/v4/search"
                 params = {
-                    "q":       topic.query,
-                    "lang":    "en",
-                    "max":     10,
-                    "apikey":  os.getenv("GNEWS_API_KEY", ""),
+                    "q":      topic.query,
+                    "lang":   "en",
+                    "max":    10,
+                    "apikey": os.getenv("GNEWS_API_KEY", ""),
                 }
-                resp = httpx.get(url, params=params, timeout=15)
+                resp = httpx.get("https://gnews.io/api/v4/search", params=params, timeout=15)
                 if resp.status_code == 200:
-                    data = resp.json()
-                    raw = data.get("articles", [])
+                    raw = resp.json().get("articles", [])
                     articles = [{
                         "title":       a.get("title"),
                         "description": a.get("description"),
@@ -250,23 +249,19 @@ def fetch_news_for_topic(topic_id: int):
             title = article.get("title", "")
             if not title or title == "[Removed]":
                 continue
-
             content = article.get("content") or article.get("description") or ""
-            pub_date = article.get("publishedAt", "")[:10]  # just the date
+            pub_date = article.get("publishedAt", "")[:10]
             art_hash = hashlib.md5((title + pub_date).encode()).hexdigest()
-
-            # Skip duplicates
             existing = db.query(UpdateDB).filter(UpdateDB.article_hash == art_hash).first()
             if existing:
                 continue
-
             new_articles.append({
-                "title":   title,
-                "content": content,
-                "url":     article.get("url", ""),
-                "source":  article.get("source", {}).get("name", "Unknown"),
+                "title":        title,
+                "content":      content,
+                "url":          article.get("url", ""),
+                "source":       article.get("source", {}).get("name", "Unknown"),
                 "published_at": article.get("publishedAt"),
-                "hash":    art_hash,
+                "hash":         art_hash,
             })
 
         if not new_articles or not GROQ_API_KEY:
@@ -274,16 +269,14 @@ def fetch_news_for_topic(topic_id: int):
             db.commit()
             return
 
-        # AI summarize batch
         client = Groq(api_key=GROQ_API_KEY)
-        for art in new_articles[:5]:  # limit to 5 per run
+        for art in new_articles[:5]:
             try:
                 prompt = f"""Topic being tracked: "{topic.name}"
 Article title: {art['title']}
 Article content: {art['content'][:800]}
 
 Write a sharp 2-3 sentence summary of what's happening and why it matters for someone tracking "{topic.name}".
-Then on a new line write exactly one word: POSITIVE, NEGATIVE, or NEUTRAL to indicate sentiment.
 Format:
 SUMMARY: <your summary>
 SENTIMENT: <POSITIVE/NEGATIVE/NEUTRAL>"""
@@ -295,8 +288,7 @@ SENTIMENT: <POSITIVE/NEGATIVE/NEUTRAL>"""
                     temperature=0.4,
                 )
                 text = response.choices[0].message.content.strip()
-
-                summary   = text.split("SENTIMENT:")[0].replace("SUMMARY:", "").strip()
+                summary = text.split("SENTIMENT:")[0].replace("SUMMARY:", "").strip()
                 sentiment = "neutral"
                 if "SENTIMENT:" in text:
                     s = text.split("SENTIMENT:")[-1].strip().upper()
@@ -307,22 +299,15 @@ SENTIMENT: <POSITIVE/NEGATIVE/NEUTRAL>"""
                 if art["published_at"]:
                     try:
                         pub_dt = datetime.fromisoformat(art["published_at"].replace("Z", "+00:00")).replace(tzinfo=None)
-                    except:
-                        pass
+                    except: pass
 
-                update = UpdateDB(
-                    topic_id     = topic.id,
-                    device_id    = topic.device_id,
-                    title        = art["title"],
-                    summary      = summary,
-                    source       = art["source"],
-                    url          = art["url"],
-                    published_at = pub_dt,
-                    sentiment    = sentiment,
-                    article_hash = art["hash"],
-                )
-                db.add(update)
-
+                db.add(UpdateDB(
+                    topic_id=topic.id, device_id=topic.device_id,
+                    title=art["title"], summary=summary,
+                    source=art["source"], url=art["url"],
+                    published_at=pub_dt, sentiment=sentiment,
+                    article_hash=art["hash"],
+                ))
             except Exception as e:
                 print(f"AI summary error: {e}")
 
@@ -332,7 +317,6 @@ SENTIMENT: <POSITIVE/NEGATIVE/NEUTRAL>"""
         if new_articles:
             send_push(topic.device_id, topic.name, len(new_articles))
 
-        print(f"✓ Fetched news for topic: {topic.name}")
     except Exception as e:
         print(f"Fetch error for topic {topic_id}: {e}")
     finally:
