@@ -141,10 +141,9 @@ def send_push(device_id: str, topic_name: str, count: int):
     onesignal_app_id = os.getenv("ONESIGNAL_APP_ID", "")
     onesignal_api_key = os.getenv("ONESIGNAL_API_KEY", "")
     if not onesignal_app_id or not onesignal_api_key:
-        print("OneSignal keys not configured")
+        print("OneSignal keys not configured — skipping push")
         return
     try:
-        import httpx
         response = httpx.post(
             "https://onesignal.com/api/v1/notifications",
             headers={
@@ -160,7 +159,7 @@ def send_push(device_id: str, topic_name: str, count: int):
             },
             timeout=10
         )
-        print(f"Push sent: {response.status_code} - {response.text}")
+        print(f"Push sent: {response.status_code}")
     except Exception as e:
         print(f"Push error: {e}")
 
