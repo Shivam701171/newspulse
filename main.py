@@ -51,14 +51,9 @@ class UpdateDB(Base):
     published_at = Column(DateTime, nullable=True)
     fetched_at   = Column(DateTime, default=datetime.utcnow)
     is_read      = Column(Boolean, default=False)
-    sentiment    = Column(String, default="neutral")  # positive/negative/neutral
-    article_hash = Column(String, nullable=True)      # prevent duplicates
+    sentiment    = Column(String, default="neutral")
+    article_hash = Column(String, nullable=True)
 
-Base.metadata.create_all(bind=engine)
-
-# Ensure new tables are created if they don't exist
-from sqlalchemy import inspect
-inspector = inspect(engine)
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
     id         = Column(Integer, primary_key=True)
@@ -68,8 +63,7 @@ class PushSubscription(Base):
     auth       = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-if 'push_subscriptions' not in inspector.get_table_names():
-    PushSubscription.__table__.create(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 class TopicCreate(BaseModel):
