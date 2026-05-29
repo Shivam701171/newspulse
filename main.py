@@ -338,14 +338,6 @@ scheduler.add_job(
 )
 scheduler.start()
 
-class PushSubscription(Base):
-    __tablename__ = "push_subscriptions"
-    id         = Column(Integer, primary_key=True)
-    device_id  = Column(String, index=True)
-    endpoint   = Column(String, unique=True)
-    p256dh     = Column(String)
-    auth       = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
 
 class SubRequest(BaseModel):
     device_id: str
